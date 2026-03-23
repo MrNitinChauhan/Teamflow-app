@@ -29,6 +29,7 @@ export class User extends Entity {
 
   @property({
     type: 'date',
+    default: () => new Date(),
   })
   createdAt?: string;
 
