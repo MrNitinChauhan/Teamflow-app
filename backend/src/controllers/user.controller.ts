@@ -53,10 +53,35 @@ export class UserController {
     })
     user: Omit<User, 'id'>,
   ): Promise<User> {
+    // ── Duplicate email check ─────────────────────────────────────────────
+    const existing = await this.userRepository.findOne({
+      where: {email: user.email},
+    });
+    if (existing) {
+      throw new HttpErrors.Conflict('An account with this email already exists');
+    }
+
+    // ── Password strength validation ──────────────────────────────────────
+    const pw = user.password;
+    if (!pw || pw.length < 8) {
+      throw new HttpErrors.UnprocessableEntity('Password must be at least 8 characters');
+    }
+    if (!/[A-Z]/.test(pw)) {
+      throw new HttpErrors.UnprocessableEntity('Password must contain at least one uppercase letter');
+    }
+    if (!/[a-z]/.test(pw)) {
+      throw new HttpErrors.UnprocessableEntity('Password must contain at least one lowercase letter');
+    }
+    if (!/[0-9]/.test(pw)) {
+      throw new HttpErrors.UnprocessableEntity('Password must contain at least one number');
+    }
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pw)) {
+      throw new HttpErrors.UnprocessableEntity('Password must contain at least one special character (!@#$%^&*…)');
+    }
+
     const saltRounds = 10;
     user.password = await bcrypt.hash(user.password, saltRounds);
     return this.userRepository.create(user);
-  
   }
 
 
@@ -81,7 +106,7 @@ export class UserController {
     })
     credentials:{email:string;password:string},
     @inject(RestBindings.Http.RESPONSE) res: Response,
-  ): Promise<{message: string}>{
+  ): Promise<{message: string; token: string; user: {id: number; email: string; name: string}}>{
     const user=await this.userRepository.findOne({
       where:{email:credentials.email},
     });
@@ -108,7 +133,11 @@ export class UserController {
       maxAge: 24 * 60 * 60 * 1000, // 1 din
     });
 
-    return {  message: 'Login successful' };
+    return {
+      message: 'Login successful',
+      token,
+      user: { id: user.id ?? 0, email: user.email, name: user.name },
+    };
   }
 
   //logout
@@ -154,7 +183,6 @@ export class UserController {
     return this.userRepository.count(where);
   }
 
-  @authenticate('jwt')
   @get('/users')
   @response(200, {
     description: 'Array of User model instances',

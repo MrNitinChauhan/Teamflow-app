@@ -1,23 +1,27 @@
-import {BootMixin} from '@loopback/boot';
-import {ApplicationConfig} from '@loopback/core';
+import { BootMixin } from '@loopback/boot';
+import { ApplicationConfig } from '@loopback/core';
 import {
   RestExplorerBindings,
   RestExplorerComponent,
-  
-  
+
+
 } from '@loopback/rest-explorer';
-import {RepositoryMixin} from '@loopback/repository';
-import {RestApplication,RestBindings,RestServer} from '@loopback/rest';
-import {ServiceMixin} from '@loopback/service-proxy';
+import { RepositoryMixin } from '@loopback/repository';
+import { RestApplication, RestBindings, RestServer } from '@loopback/rest';
+import { ServiceMixin } from '@loopback/service-proxy';
 import path from 'path';
-import {MySequence} from './sequence';
-import {AuthenticationComponent} from '@loopback/authentication';
+import { MySequence } from './sequence';
+import { AuthenticationComponent } from '@loopback/authentication';
 import {
   JWTAuthenticationComponent,
   TokenServiceBindings,
 } from '@loopback/authentication-jwt';
 import cookieParser from 'cookie-parser';
-export {ApplicationConfig};
+import {registerAuthenticationStrategy} from '@loopback/authentication';
+import {CookieJwtStrategy} from './services/cookie-jwt.strategy';
+import {DeadlineNotifierService} from './services/deadline-notifier.service';
+import {TaskModelRepository, NotificationRepository} from './repositories';
+export { ApplicationConfig };
 
 export class BackendApplication extends BootMixin(
   ServiceMixin(RepositoryMixin(RestApplication)),
@@ -27,7 +31,7 @@ export class BackendApplication extends BootMixin(
       ...options,
       rest: {
         cors: {
-          origin: 'http://localhost:5173',
+          origin: ['http://localhost:5173', 'http://localhost:5174'],
           credentials: true,
           allowedHeaders: ['Content-Type', 'Authorization'],
           methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -35,15 +39,16 @@ export class BackendApplication extends BootMixin(
       },
     });
 
-    
+
     this.component(AuthenticationComponent);
     this.component(JWTAuthenticationComponent);
     this.bind(TokenServiceBindings.TOKEN_SECRET).to(
       process.env.JWT_SECRET ?? 'secret',
     );
     this.expressMiddleware('middleware.cookieParser', cookieParser());
+    registerAuthenticationStrategy(this, CookieJwtStrategy);
 
-    
+
 
     // Set up the custom sequence
     this.sequence(MySequence);
@@ -68,4 +73,5 @@ export class BackendApplication extends BootMixin(
       },
     };
   }
+
 }

@@ -1,59 +1,10 @@
-// import { useState } from 'react';
-// import { useNavigate } from 'react-router-dom';
-// import API from '../services/api';
-
-// export default function Login() {
-//   const [form, setForm] = useState({
-//     email: '',
-//     password: '',
-//   });
-//   const navigate = useNavigate();
-
-//   const handleChange = (e) => {
-//     setForm({ ...form, [e.target.name]: e.target.value });
-//   };
-
-//   const handleSubmit = async (e) => {
-//     e.preventDefault();
-//     try {
-//       const res = await API.get(`/users?filter={"where":{"email":"${form.email}","password":"${form.password}"}}`);
-      
-//       if (res.data.length > 0) {
-//         localStorage.setItem('user', JSON.stringify(res.data[0]));
-//         alert('Login successful!');
-//         navigate('/dashboard');
-//       } else {
-//         alert('Invalid email or password!');
-//       }
-//     } catch (err) {
-//       console.error(err);
-//       alert('Login failed!');
-//     }
-//   };
-
-//   return (
-//     <div>
-//       <h2>Login</h2>
-//       <form onSubmit={handleSubmit}>
-//         <input name="email" placeholder="Email" onChange={handleChange} />
-//         <input name="password" type="password" placeholder="Password" onChange={handleChange} />
-//         <button type="submit">Login</button>
-//       </form>
-//       <p>Don't have an account? <a href="/register">Register</a></p>
-//     </div>
-//   );
-// }
-
-
-
-//--tailwind
-
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import API from '../services/api';
 
 export default function Login() {
   const [form, setForm] = useState({ email: '', password: '' });
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleChange = (e) => {
@@ -62,59 +13,84 @@ export default function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
     try {
       await API.post('/users/login', {
         email: form.email,
         password: form.password,
-      }, { withCredentials: true }); // ✅ cookies allow karo
-  
+      }, { withCredentials: true });
       navigate('/dashboard');
-  
     } catch (err) {
       alert('Invalid email or password!');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-      <div className="bg-white p-8 rounded-2xl shadow-md w-full max-w-md">
-        <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">
-          Welcome to Teamflow
-        </h2>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <input
-              name="email"
-              type="email"
-              placeholder="Enter your email"
-              onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+    <div className="mesh-bg flex items-center justify-center px-4">
+      <div className="animate-in w-full max-w-md">
+        {/* Logo */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 mb-4 shadow-lg shadow-indigo-500/25">
+            <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-            <input
-              name="password"
-              type="password"
-              placeholder="Enter your password"
-              onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+            Teamflow
+          </h1>
+          <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>Sign in to your workspace</p>
+        </div>
+
+        {/* Card */}
+        <div className="glass p-8">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div>
+              <label className="block text-xs font-medium mb-2 tracking-wide uppercase" style={{ color: 'var(--text-muted)' }}>Email</label>
+              <input
+                name="email"
+                type="email"
+                placeholder="you@example.com"
+                onChange={handleChange}
+                required
+                className="input-dark"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-2 tracking-wide uppercase" style={{ color: 'var(--text-muted)' }}>Password</label>
+              <input
+                name="password"
+                type="password"
+                placeholder="••••••••"
+                onChange={handleChange}
+                required
+                className="input-dark"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="btn-accent w-full text-sm"
+              style={{ padding: '12px 24px', opacity: loading ? 0.7 : 1 }}
+            >
+              {loading ? 'Signing in…' : 'Sign In'}
+            </button>
+          </form>
+
+          <div className="mt-6 text-center">
+            <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
+              Don't have an account?{' '}
+              <a
+                href="/register"
+                className="font-semibold hover:underline"
+                style={{ color: 'var(--accent-hover)' }}
+              >
+                Create one
+              </a>
+            </span>
           </div>
-          <button
-            type="submit"
-            className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition font-semibold"
-          >
-            Login
-          </button>
-        </form>
-        <p className="text-center text-sm text-gray-500 mt-4">
-          Don't have an account?{' '}
-          <a href="/register" className="text-blue-600 hover:underline font-medium">
-            Register
-          </a>
-        </p>
+        </div>
       </div>
     </div>
   );

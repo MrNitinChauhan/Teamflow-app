@@ -1,4 +1,6 @@
 import {ApplicationConfig, BackendApplication} from './application';
+import {DeadlineNotifierService} from './services/deadline-notifier.service';
+import {TaskModelRepository, NotificationRepository} from './repositories';
 
 export * from './application';
 
@@ -6,6 +8,16 @@ export async function main(options: ApplicationConfig = {}) {
   const app = new BackendApplication(options);
   await app.boot();
   await app.start();
+
+  // Start background deadline-notification poller
+  try {
+    const taskRepo = await app.get<TaskModelRepository>('repositories.TaskModelRepository');
+    const notifRepo = await app.get<NotificationRepository>('repositories.NotificationRepository');
+    new DeadlineNotifierService(taskRepo as any, notifRepo as any).start();
+    console.log('[DeadlineNotifier] Background deadline checker started.');
+  } catch (e) {
+    console.error('[DeadlineNotifier] Failed to start:', e);
+  }
 
   const url = app.restServer.url;
   console.log(`Server is running at ${url}`);

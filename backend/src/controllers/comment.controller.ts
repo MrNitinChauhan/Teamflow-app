@@ -12,20 +12,31 @@ import {
   get,
   getModelSchemaRef,
   patch,
-  put,
   del,
   requestBody,
   response,
+  HttpErrors,
 } from '@loopback/rest';
+import {authenticate} from '@loopback/authentication';
+import {SecurityBindings, securityId, UserProfile} from '@loopback/security';
+import {inject} from '@loopback/core';
 import {CommentModel} from '../models';
-import {CommentModelRepository} from '../repositories';
+import {CommentModelRepository, TaskModelRepository, NotificationRepository, UserRepository} from '../repositories';
 
 export class CommentController {
   constructor(
     @repository(CommentModelRepository)
     public commentModelRepository : CommentModelRepository,
+    @repository(TaskModelRepository)
+    public taskModelRepository: TaskModelRepository,
+    @repository(NotificationRepository)
+    public notificationRepository: NotificationRepository,
+    @repository(UserRepository)
+    public userRepository: UserRepository,
   ) {}
 
+  // ─── POST COMMENT (auth required, userId comes from cookie) ──────────────────
+  @authenticate('cookie-jwt')
   @post('/comments')
   @response(200, {
     description: 'CommentModel model instance',
@@ -37,27 +48,66 @@ export class CommentController {
         'application/json': {
           schema: getModelSchemaRef(CommentModel, {
             title: 'NewCommentModel',
-            exclude: ['id'],
+            exclude: ['id', 'userId'],
           }),
         },
       },
     })
-    commentModel: Omit<CommentModel, 'id'>,
+    commentModel: Omit<CommentModel, 'id' | 'userId'>,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
   ): Promise<CommentModel> {
-    return this.commentModelRepository.create(commentModel);
+    const commenterId = Number(currentUser[securityId]);
+    const newComment = {
+      ...commentModel,
+      userId: commenterId,
+      createdAt: new Date().toISOString(),
+    };
+    const created = await this.commentModelRepository.create(newComment);
+
+    // ── Notify task participants about the new comment ─────────────────────
+    try {
+      const task = await this.taskModelRepository.findById(commentModel.taskId);
+      const recipientIds = new Set<number>();
+
+      // Add task creator
+      if (task.createdBy && task.createdBy !== commenterId) {
+        recipientIds.add(task.createdBy);
+      }
+
+      // Add assigned users
+      if (task.assignedTo) {
+        if (task.assignedTo === 'all') {
+          const allUsers = await this.userRepository.find();
+          allUsers.forEach(u => { if (u.id && u.id !== commenterId) recipientIds.add(u.id); });
+        } else {
+          try {
+            const ids: number[] = JSON.parse(task.assignedTo);
+            ids.forEach(uid => { if (uid !== commenterId) recipientIds.add(uid); });
+          } catch { /* skip */ }
+        }
+      }
+
+      // Create notifications
+      const notifPromises = Array.from(recipientIds).map(uid =>
+        this.notificationRepository.create({
+          userId: uid,
+          type: 'comment',
+          message: `New comment on "${task.title}"`,
+          taskId: task.id,
+          isRead: false,
+          createdAt: new Date().toISOString(),
+        }),
+      );
+      await Promise.all(notifPromises);
+    } catch (e) {
+      console.error('[Notification] Failed to notify on comment:', e);
+    }
+
+    return created;
   }
 
-  @get('/comments/count')
-  @response(200, {
-    description: 'CommentModel model count',
-    content: {'application/json': {schema: CountSchema}},
-  })
-  async count(
-    @param.where(CommentModel) where?: Where<CommentModel>,
-  ): Promise<Count> {
-    return this.commentModelRepository.count(where);
-  }
-
+  // ─── GET COMMENTS FOR A TASK (auth required) ─────────────────────────────────
+  @authenticate('cookie-jwt')
   @get('/comments')
   @response(200, {
     description: 'Array of CommentModel model instances',
@@ -76,75 +126,18 @@ export class CommentController {
     return this.commentModelRepository.find(filter);
   }
 
-  @patch('/comments')
-  @response(200, {
-    description: 'CommentModel PATCH success count',
-    content: {'application/json': {schema: CountSchema}},
-  })
-  async updateAll(
-    @requestBody({
-      content: {
-        'application/json': {
-          schema: getModelSchemaRef(CommentModel, {partial: true}),
-        },
-      },
-    })
-    commentModel: CommentModel,
-    @param.where(CommentModel) where?: Where<CommentModel>,
-  ): Promise<Count> {
-    return this.commentModelRepository.updateAll(commentModel, where);
-  }
-
-  @get('/comments/{id}')
-  @response(200, {
-    description: 'CommentModel model instance',
-    content: {
-      'application/json': {
-        schema: getModelSchemaRef(CommentModel, {includeRelations: true}),
-      },
-    },
-  })
-  async findById(
-    @param.path.number('id') id: number,
-    @param.filter(CommentModel, {exclude: 'where'}) filter?: FilterExcludingWhere<CommentModel>
-  ): Promise<CommentModel> {
-    return this.commentModelRepository.findById(id, filter);
-  }
-
-  @patch('/comments/{id}')
-  @response(204, {
-    description: 'CommentModel PATCH success',
-  })
-  async updateById(
-    @param.path.number('id') id: number,
-    @requestBody({
-      content: {
-        'application/json': {
-          schema: getModelSchemaRef(CommentModel, {partial: true}),
-        },
-      },
-    })
-    commentModel: CommentModel,
-  ): Promise<void> {
-    await this.commentModelRepository.updateById(id, commentModel);
-  }
-
-  @put('/comments/{id}')
-  @response(204, {
-    description: 'CommentModel PUT success',
-  })
-  async replaceById(
-    @param.path.number('id') id: number,
-    @requestBody() commentModel: CommentModel,
-  ): Promise<void> {
-    await this.commentModelRepository.replaceById(id, commentModel);
-  }
-
+  // ─── DELETE COMMENT (only the comment author) ─────────────────────────────────
+  @authenticate('cookie-jwt')
   @del('/comments/{id}')
-  @response(204, {
-    description: 'CommentModel DELETE success',
-  })
-  async deleteById(@param.path.number('id') id: number): Promise<void> {
+  @response(204, {description: 'CommentModel DELETE success'})
+  async deleteById(
+    @param.path.number('id') id: number,
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+  ): Promise<void> {
+    const comment = await this.commentModelRepository.findById(id);
+    if (comment.userId !== Number(currentUser[securityId])) {
+      throw new HttpErrors.Forbidden('You can only delete your own comments');
+    }
     await this.commentModelRepository.deleteById(id);
   }
 }

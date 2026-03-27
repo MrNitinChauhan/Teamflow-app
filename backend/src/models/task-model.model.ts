@@ -17,9 +17,8 @@ export class TaskModel extends Entity {
 
   @property({
     type: 'string',
-    required: true,
   })
-  description: string;
+  description?: string;
 
   @property({
     type: 'string',
@@ -43,9 +42,9 @@ export class TaskModel extends Entity {
   createdBy?: number;
 
   @property({
-    type: 'number',
+    type: 'string',
   })
-  assignedTo?: number;
+  assignedTo?: string; // JSON array of user IDs, e.g. '[1,2,3]', or 'all'
 
 
   constructor(data?: Partial<TaskModel>) {
