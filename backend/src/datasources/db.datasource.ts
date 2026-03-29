@@ -5,11 +5,11 @@ const config = {
   name: 'db',
   connector: 'postgresql',
   url: '',
-  host: 'localhost',
-  port: 5432,
-  user: 'postgres',
-  password: 'Guru@1234',
-  database: 'teamflow_db'
+  host: process.env.DB_HOST || 'localhost',
+  port: parseInt(process.env.DB_PORT || '5432'),
+  user: process.env.DB_USER || 'postgres',
+  password: process.env.DB_PASSWORD || 'Guru@1234',
+  database: process.env.DB_NAME || 'teamflow_db'
 };
 
 // Observe application's life cycle to disconnect the datasource when

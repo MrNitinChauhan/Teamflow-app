@@ -31,7 +31,11 @@ export class BackendApplication extends BootMixin(
       ...options,
       rest: {
         cors: {
-          origin: ['http://localhost:5173', 'http://localhost:5174'],
+          origin: [
+            'http://localhost:5173',
+            'http://localhost:5174',
+            ...(process.env.CORS_ORIGIN ? [process.env.CORS_ORIGIN] : []),
+          ],
           credentials: true,
           allowedHeaders: ['Content-Type', 'Authorization'],
           methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
